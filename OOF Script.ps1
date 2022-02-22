@@ -17,9 +17,9 @@ function get-Alias {
 	if($CurrentUser -eq $undefinedVariable){
 		$CurrentUser = CurrentUserNamefromWindows
 	}
-	$PromptText = "Enter the Alias Suffix you want to change. Ex. @MicrosofSupport"
+	$PromptText = "Enter the Alias Suffix of the Account to change. Ex. @MicrosofSupport.com"
 	$UserAliasSuffix = Read-Host -Prompt $prompttext
-	if($UserAliasSuffix -eq $undefinedVariable){
+	if($UserAliasSuffix -eq $undefinedVariable){ #if nothing entered default test
 		$UserAliasSuffix = "@MicrosoftSupport.com"
 	}
 	$UserAlias = $CurrentUser + $UserAliasSuffix
@@ -27,10 +27,11 @@ function get-Alias {
 }
 
 function ConnectAlias2EXO {
-	Write-Host "Connecting to your Outlook Account`n"
+	InstallEXOM #is EXO module installed
 	if($UserAlias -eq $undefinedVariable){
-	$UserAlias = get-Alias(CurrentUserNamefromWindows)   
+		$UserAlias = get-Alias   
 	}
+	Write-Host "Connecting to your Outlook Account " + $UserAlias + "`n" 
 	Connect-ExchangeOnline -UserPrincipalName $UserAlias
 	Write-Host "Done Connecting"
 }
@@ -49,6 +50,8 @@ function GET-ARCSTATE {
 	return $MailboxARC.AutoReplyState
 }
 
+#set autoreply to scheduled
+#this requires start and end times
 function Set-ARCSTATEScheduled {
 	if($MailboxARC -eq $undefinedVariable){
 		$MailboxARC = get-arc
@@ -56,36 +59,45 @@ function Set-ARCSTATEScheduled {
 	if($UserAlias -eq $undefinedVariable){
 		$UserAlias = get-Alias
 	}
-	if($StartofShift -eq $undefinedVariable){
-		$StartofShift = GetShiftTime("start")
+	if($StartOfShift -eq $undefinedVariable){
+		$StartOfShift = GetShiftTime("start")
 	}
-	if($EndofShift -eq $undefinedVariable){
-		$EndofShift = GetShiftTime("end")
+	if($EndOfShift -eq $undefinedVariable){
+		$EndOfShift = GetShiftTime("end")
 	}
-	if($MailboxARC.AutoReplyState -eq "Disabled"-or $MailboxARC.AutoReplyState -eq "Enabled"){
+	#is Reply state disabled or enabled by the user manually instead of scheduled
+	if($MailboxARC.AutoReplyState -eq "Disabled" -or $MailboxARC.AutoReplyState -eq "Enabled"){
 		$CurrentTime = Get-Date
-		if($CurrentTime.TimeOfDay -lt $StartofShift.TimeOfDay){ 
-			Write-Host "Currently Before Shift`n"
-		}
-		elseif($CurrentTime.TimeOfDay -gt $EndofShift.TimeOfDay){
-			Write-Host "Currently After Shift`n"
-		}
-		elseif($EndofShift.TimeOfDay -le $CurrentTime.TimeOfDay -And $CurrentTime.TimeOfDay -ge $StartofShift.TimeOfDay){
-			Write-Host "Currently During Shift`n"
-		}
-		else {
-			Write-Host "Twilight Zone"
-		}
+		IsOfficeHours
 	}
-	$StartofShift = $StartofShift.TimeofDay.AddDays(1)
-	Set-MailboxAutoReplyConfiguration –identity $UserAlias `
-	-ExternalMessage $MailboxARC.ExternalMessage `
-	-InternalMessage $MailboxARC.InternalMessage `
-	-StartTime $EndofShift.TimeofDay `
-	-EndTime $StartofShift.TimeofDay `
-	-AutoReplyState "Scheduled"
+	else { #set to scheduled
+		$StartOfShift = $StartOfShift.TimeofDay.AddDays(1)
+		Set-MailboxAutoReplyConfiguration –identity $UserAlias `
+		-ExternalMessage $MailboxARC.ExternalMessage `
+		-InternalMessage $MailboxARC.InternalMessage `
+		-StartTime $EndOfShift.TimeofDay `
+		-EndTime $StartOfShift.TimeofDay `
+		-AutoReplyState "Scheduled"
+	}
 }
 
+function IsOfficeHours {
+	#check if it is during shift return bool based on start and end time
+	if($CurrentTime.TimeOfDay -lt $StartOfShift.TimeOfDay){ 
+		Write-Host "Currently Before Shift`n"
+	}
+	elseif($CurrentTime.TimeOfDay -gt $EndOfShift.TimeOfDay){
+		Write-Host "Currently After Shift`n"
+	}
+	elseif($EndOfShift.TimeOfDay -le $CurrentTime.TimeOfDay -And $CurrentTime.TimeOfDay -ge $StartOfShift.TimeOfDay){
+		Write-Host "Currently During Shift`n"
+		Return True
+	}
+	else {
+		Write-Host "Twilight Zone"
+	}
+	Return False
+}
 function Get-Message {
 	if($CurrentUser -eq $undefinedVariable){
 		$CurrentUser = CurrentUserNamefromWindows
