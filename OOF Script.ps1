@@ -16,13 +16,12 @@ function CurrentUserNamefromWindows {
 function get-Alias {
 	if($CurrentUser -eq $undefinedVariable){
 		$CurrentUser = CurrentUserNamefromWindows
-    }
+	}
 	$prompttext = "Enter the Alias Suffix you want to change. Ex. @MicrosofSupport"
 	$userAliasSuffix = Read-Host -Prompt $prompttext
-	$userAliasSuffix = "@MicrosoftSupport.com"
- if($CurrentUser -eq $undefinedVariable){
-        $CurrentUser = CurrentUserNamefromWindows
-    }
+	if($userAliasSuffix -eq $undefinedVariable){
+        	$userAliasSuffix = "@MicrosoftSupport.com"
+	}
 	$userAlias = $CurrentUser + $userAliasSuffix
     return $useralias
 }
