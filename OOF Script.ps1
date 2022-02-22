@@ -14,19 +14,23 @@ function CurrentUserNamefromWindows {
 }
 
 function get-Alias {
-    if($CurrentUser -eq $undefinedVariable){
+	if($CurrentUser -eq $undefinedVariable){
+		$CurrentUser = CurrentUserNamefromWindows
+    }
+	$prompttext = "Enter the Alias Suffix you want to change. Ex. @MicrosofSupport"
+	$userAliasSuffix = Read-Host -Prompt $prompttext
+	$userAliasSuffix = "@MicrosoftSupport.com"
+ if($CurrentUser -eq $undefinedVariable){
         $CurrentUser = CurrentUserNamefromWindows
     }
-    #what kind of alias do you want
-    #$CUAlias1 = $CurrentUser + "@Microsoft.com"
-	$userAlias = $CurrentUser + "@MicrosoftSupport.com"
+	$userAlias = $CurrentUser + $userAliasSuffix
     return $useralias
 }
 
 function ConnectAlias2EXO {
     Write-Host "Connecting to your Outlook Account`n"
     if($useralias -eq $undefinedVariable){
-		$useralias = get-Alias(CurrentUserNamefromWindows)   
+	$useralias = get-Alias(CurrentUserNamefromWindows)   
     }
     Connect-ExchangeOnline -UserPrincipalName $useralias
     Write-Host "Done Connecting"
