@@ -1,8 +1,8 @@
-$Global:UserAlias
-$Global:CurrentUser
+$Global:UserAlias=
+$Global:CurrentUser=
 $Global:UserAliasSuffix="@MicrosoftSupport.com"
-$Global:MailboxARC
-$Global:MessageFilePath= "C:\Users\" + $CurrentUser + "\OneDrive - Microsoft\Desktop\oof message script\AutoReplyConfig.json"
+$Global:MailboxARC=
+$Global:MessageFilePath= "C:\Users\$Global:CurrentUser\OneDrive - Microsoft\Desktop\oof message script\AutoReplyConfig.json"
 
 function InstallEXOM {
 	if (Get-Module -ListAvailable -Name ExchangeOnlineManagement) {
@@ -23,7 +23,9 @@ function CurrentUserNamefromWindows {
 }
 
 function get-Alias {
-	CurrentUserNamefromWindows
+	if($Global:CurrentUser -eq $null) {
+		CurrentUserNamefromWindows
+	}
 	$PromptText = "Enter the Alias Suffix of the Account to change. Ex. $UserAliasSuffix"
 
 	$Global:UserAliasSuffix = Read-Host -Prompt $prompttext
@@ -38,50 +40,44 @@ function get-Alias {
 
 function ConnectAlias2EXO {
 	InstallEXOM #is EXO module installed
-	get-Alias   
-	Write-Host "Connecting to your Outlook Account " $UserAlias "`n" 
+	if($Global:UserAlias -eq $null){
+		get-Alias
+	} 
+	Write-Host "Connecting to your Outlook Account $UserAlias`n" 
 	Connect-ExchangeOnline -UserPrincipalName $UserAlias
 	Write-Host "Done Connecting"
 }
 
 
-########
-####OLD GET ARC, now we store the whole Auto Reply Config in the file in native json
-#### which means we gotta parse json for all the other functions.....
-function get-arc {
-	if($UserAlias = $null){
-		$UserAlias = get-Alias
-	}
-    ConnectAlias2EXO
-	$MailboxARC = Get-MailboxAutoReplyConfiguration -identity $UserAlias
-	return $MailboxARC
-}
-
-function GET-ARCSTATE {
-	$MailboxARC = get-arc
-	Write-Host "Current Auto Reply State is :" + $MailboxARC.AutoReplyState
-	return $MailboxARC.AutoReplyState
-}
-#######end old get arc
-##########
-
 #####
-function get-NEWARC {
-	if($CurrentUser = $null) {
-		$CurrentUser = CurrentUserNamefromWindows
+function get-ARC {
+	if($Global:CurrentUser -eq $null) {
+		CurrentUserNamefromWindows
+	}
+    if($Global:UserAlias -eq $null){
+		get-Alias
 	}
 
-    $MessageFilePath = "C:\Users\" + $CurrentUser + "\OneDrive - Microsoft\Desktop\oof message script\AutoReplyConfig.json"
+    $Global:MessageFilePath = "C:\Users\$Global:CurrentUser\OneDrive - Microsoft\Desktop\oof message script\AutoReplyConfig.json"
 
-	if($MessageFilePath) {
-		$MailboxARC = get-arc
+	if(Check-File($Global:MessageFilePath)) {
+        #read file here from json
 	}
-    else{
-        $MailboxARC = get-arc
+    else {
+        ConnectAlias2EXO
+	    $Global:MailboxARC = Get-MailboxAutoReplyConfiguration -identity $UserAlias
     }
 	
-	$MailboxARC | ConvertTo-Json -depth 100 | Set-Content $MessageFilePath
-	Write-Host "Current Auto Reply State is :" + $MailboxARC.AutoReplyState
+	$Global:MailboxARC | ConvertTo-Json -depth 100 | Set-Content $Global:MessageFilePath
+
+	Write-Host "Current Auto Reply State is : 'n" + (get-ARCState)
+}
+
+
+####check file does exist
+function Check-File($FilePath) {
+    return (Get-Item -Path $FilePath -ErrorAction Ignore)
+	
 }
 
 #set autoreply to scheduled
@@ -134,21 +130,21 @@ function IsOfficeHours {
 }
 
 function Get-Message {
-	if($CurrentUser = $null){
-		$CurrentUser = CurrentUserNamefromWindows
+	if($Global:CurrentUser = $null){
+		CurrentUserNamefromWindows
 	}
     #read from stored file first then get from active and compare?
-	if($MailboxARC.ExternalMessage = $null){
-		$MailboxARC = get-arc
+	if($Global:MailboxARC.ExternalMessage = $null){
+		get-arc
 	}
 
-	$MessageFilePath = "C:\Users\" + $CurrentUser + "\OneDrive - Microsoft\Desktop\oof message script\OOFMessage"
+	$Global:MessageFilePath = "C:\Users\${Global:CurrentUser}\OneDrive - Microsoft\Desktop\oof message script\OOFMessage"
 
-	if($MailboxARC.ExternalMessage -and $MailboxARC.InternalMessage) {
-		if($MailboxARC.ExternalMessage -= $MailboxARC.InternalMessage){
+	if($Global:MailboxARC.ExternalMessage -and $MailboxARC.InternalMessage) {
+		if($Global:MailboxARC.ExternalMessage -= $MailboxARC.InternalMessage){
 			Write-Host "The internal and external messages are the same. `nOne OOF Message to Rule them All `n"
-			$MailboxARC.ExternalMessage | Out-File ($MessageFilePath + ".txt")
-			Write-Output $MailboxARC.ExternalMessage
+			$Global:MailboxARC.ExternalMessage | Out-File ($Global:MessageFilePath + ".txt")
+			Write-Output $Global:MailboxARC.ExternalMessage
 		}
 		else{
 			Write-Host "Differenet External and Internal Messages"
@@ -163,10 +159,10 @@ function Get-Message {
 }
 
 function Set-Message {
-	if($CurrentUser = $null){
-		$CurrentUser = CurrentUserNamefromWindows
+	if($Global:CurrentUser = $null){
+		CurrentUserNamefromWindows
 	}
-	$MessageFilePath = "C:\Users\" + $CurrentUser + "\OneDrive - Microsoft\Desktop\oof message script\OOFMessage"
+	$MessageFilePath = "C:\Users\$Global:CurrentUser\OneDrive - Microsoft\Desktop\oof message script\OOFMessage"
 	if($UserAlias = $null){
 		$UserAlias = get-Alias
 	}
