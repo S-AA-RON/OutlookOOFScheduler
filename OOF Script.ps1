@@ -2,8 +2,13 @@ $Global:UserAlias=
 $Global:CurrentUser=
 $Global:UserAliasSuffix="@MicrosoftSupport.com"
 $Global:MailboxARC=
-$Global:MessageFilePath= "C:\Users\$Global:CurrentUser\OneDrive - Microsoft\Desktop\oof message script\AutoReplyConfig.json"
-
+$Global:EndOfShift=
+$Global:StartOfShift=
+get-Alias
+$AliasPath = $Global:UserAlias.replace("@","_")
+$Global:MessageFilePath= "C:\Users\${Global:CurrentUser}\OneDrive - Microsoft\Desktop\oof message script\$AliasPath\"
+ConnectAlias2EXO
+#DisconnectEXO
 function InstallEXOM {
 	if (Get-Module -ListAvailable -Name ExchangeOnlineManagement) {
 		#Write-Host "ExchangeOnlineManagement exists, not installing`n"
@@ -23,88 +28,96 @@ function CurrentUserNamefromWindows {
 }
 
 function get-Alias {
-	if($Global:CurrentUser -eq $null) {
-		CurrentUserNamefromWindows
-	}
-	$PromptText = "Enter the Alias Suffix of the Account to change. Ex. $UserAliasSuffix"
+	CurrentUserNamefromWindows
+	
+	$PromptText = "$Global:CurrentUser please enter the Alias Suffix of the Account to change. Ex. $Global:UserAliasSuffix"
 
 	$Global:UserAliasSuffix = Read-Host -Prompt $prompttext
     if($Global:UserAliasSuffix -eq ""){ #if user doesn't input anything use default
 		$Global:UserAliasSuffix="@MicrosoftSupport.com"
 	}
-    Write-Host "UserAliasSuffix is $Global:UserAliasSuffix"
-	
+    
     $Global:UserAlias = "$Global:CurrentUser$Global:UserAliasSuffix"
     Write-Host "UserAlias is $Global:UserAlias"
+    Write-Host "UserAliasSuffix is $Global:UserAliasSuffix"
 }
 
 function ConnectAlias2EXO {
 	InstallEXOM #is EXO module installed
-	if($Global:UserAlias -eq $null){
-		get-Alias
-	} 
+	
 	Write-Host "Connecting to your Outlook Account $UserAlias`n" 
 	Connect-ExchangeOnline -UserPrincipalName $UserAlias
 	Write-Host "Done Connecting"
 }
 
-
-#####
 function get-ARC {
-	if($Global:CurrentUser -eq $null) {
-		CurrentUserNamefromWindows
-	}
-    if($Global:UserAlias -eq $null){
-		get-Alias
-	}
-
-    $Global:MessageFilePath = "C:\Users\$Global:CurrentUser\OneDrive - Microsoft\Desktop\oof message script\AutoReplyConfig.json"
-
-	if(Check-File($Global:MessageFilePath)) {
-        #read file here from json
+    $TempPath = $Global:MessageFilePath + "AutoReplyConfig.json"
+	if(Check-File($TempPath)) {
+        Write-Host "AutoConfig has pre-existing file $TempPath"
+        get-ARCFile
 	}
     else {
-        ConnectAlias2EXO
+         Write-Host "AutoConfig is being written to JSON file $TempPath"
 	    $Global:MailboxARC = Get-MailboxAutoReplyConfiguration -identity $UserAlias
+        $Global:MailboxARC | ConvertTo-Json -depth 100 | Set-Content $TempPath
     }
-	
-	$Global:MailboxARC | ConvertTo-Json -depth 100 | Set-Content $Global:MessageFilePath
-
-	Write-Host "Current Auto Reply State is : 'n" + (get-ARCState)
+		
+    $temp = $Global:MailboxARC.AutoReplyState
+	Write-Host "Current Auto Reply State is : $temp"
 }
 
+function get-ARCFile {
+   
+    $TempPath = $Global:MessageFilePath + "AutoReplyConfig.json"
+    $Global:MailboxARC = Get-Content $TempPath -Raw | ConvertFrom-Json 
+}
+
+function writeMessage {
+    get-ARCFile
+    #write external to html remove the'?' at the start, fix this bug later lol
+    #overwrites from json
+    #add file check
+    $TempPath = $Global:MessageFilePath + "External.html"
+    $Global:MailboxARC.ExternalMessage.substring(1) | Out-File -FilePath $TempPath
+    #same but internal
+    #overwrites from json
+    #add file check
+    $TempPath = $Global:MessageFilePath + "Internal.html"
+    $Global:MailboxARC.InternalMessage.substring(1) | Out-File -FilePath $TempPath
+}
 
 ####check file does exist
 function Check-File($FilePath) {
     return (Get-Item -Path $FilePath -ErrorAction Ignore)
-	
 }
 
 #set autoreply to scheduled
-#this r=uires start and end times
+#this requires start and end times
 function Set-ARCSTATEScheduled {
-	if($MailboxARC = $null){
-		$MailboxARC = get-arc
+	if($Global:MailboxARC -eq $null){
+		$Global:MailboxARC = get-arc
 	}
-	if($UserAlias = $null){
-		$UserAlias = get-Alias
+	if($Global:UserAlias -eq $null){
+		$Global:UserAlias = get-Alias
 	}
-	if($StartOfShift = $null){
-		$StartOfShift = GetShiftTime("start")
+	if($Global:StartOfShift -eq $null){
+		$Global:StartOfShift = GetShiftTime("start")
 	}
-	if($EndOfShift = $null){
-		$EndOfShift = GetShiftTime("end")
+	if($Global:EndOfShift -eq $null){
+		$Global:EndOfShift = GetShiftTime("end")
 	}
 	#is Reply state disabled or enabled by the user manually instead of scheduled
-	if($MailboxARC.AutoReplyState -eq "Disabled" -or $MailboxARC.AutoReplyState -eq "Enabled"){
+	if($Global:MailboxARC.AutoReplyState -eq "Disabled" -or $Global:MailboxARC.AutoReplyState -eq "Enabled"){
 		$CurrentTime = Get-Date
 		IsOfficeHours
 	}
-	else { #set to scheduled
-		$StartOfShift = $StartOfShift.TimeofDay.AddDays(1)
+    #remove this else? this is the point of this function
+    #add read from ARC json
+	else {
+		$Global:StartOfShift = $Global:StartOfShift.TimeofDay.AddDays(1)
 		Set-MailboxAutoReplyConfiguration –identity $UserAlias `
-		-ExternalMessage $MailboxARC.ExternalMessage `
-		-InternalMessage $MailboxARC.InternalMessage `
+		-ExternalMessage $Global:MailboxARC.ExternalMessage `
+		-InternalMessage $Global:MailboxARC.InternalMessage `
 		-StartTime $EndOfShift.TimeofDay `
 		-EndTime $StartOfShift.TimeofDay `
 		-AutoReplyState "Scheduled"
@@ -130,61 +143,50 @@ function IsOfficeHours {
 }
 
 function Get-Message {
-	if($Global:CurrentUser = $null){
-		CurrentUserNamefromWindows
-	}
     #read from stored file first then get from active and compare?
-	if($Global:MailboxARC.ExternalMessage = $null){
-		get-arc
+	if($Global:MailboxARC.ExternalMessage -eq $null -or $Global:MailboxARC.InternalMessage -eq $null ){
+		get-ARC
 	}
-
-	$Global:MessageFilePath = "C:\Users\${Global:CurrentUser}\OneDrive - Microsoft\Desktop\oof message script\OOFMessage"
-
-	if($Global:MailboxARC.ExternalMessage -and $MailboxARC.InternalMessage) {
-		if($Global:MailboxARC.ExternalMessage -= $MailboxARC.InternalMessage){
-			Write-Host "The internal and external messages are the same. `nOne OOF Message to Rule them All `n"
-			$Global:MailboxARC.ExternalMessage | Out-File ($Global:MessageFilePath + ".txt")
-			Write-Output $Global:MailboxARC.ExternalMessage
+	if($Global:MailboxARC.ExternalMessage -and $Global:MailboxARC.InternalMessage) {
+        #If messages are the same only write one message file to disk
+		if($Global:MailboxARC.ExternalMessage -eq $Global:MailboxARC.InternalMessage){
+            $TempPath = $Global:MessageFilePath + "External.html"
+            Write-Host "The internal and external messages are the same. `nOne OOF Message to Rule them All `n Writing Message to HTML $TempPath"
+            $Global:MailboxARC.ExternalMessage.substring(1) | Out-File -FilePath $TempPath
 		}
 		else{
 			Write-Host "Differenet External and Internal Messages"
 
-			$MailboxARC.ExternalMessage | Out-File ($MessageFilePath + "_External.txt")
-			Write-Output $MailboxARC.ExternalMessage
-
-			$MailboxARC.InternalMessage | Out-File ($MessageFilePath + "_Internal.txt")
-			Write-Output $MailboxARC.InternalMessage
+            $TempPath = $Global:MessageFilePath + "External.html"
+            $Global:MailboxARC.ExternalMessage.substring(1) | Out-File -FilePath $TempPath
+ 
+            $TempPath = $Global:MessageFilePath + "Internal.html"
+            $Global:MailboxARC.InternalMessage.substring(1) | Out-File -FilePath $TempPath
 		}
 	}
 }
 
 function Set-Message {
-	if($Global:CurrentUser = $null){
-		CurrentUserNamefromWindows
-	}
-	$MessageFilePath = "C:\Users\$Global:CurrentUser\OneDrive - Microsoft\Desktop\oof message script\OOFMessage"
-	if($UserAlias = $null){
-		$UserAlias = get-Alias
-	}
+	$MessageFilePath = "C:\Users\${Global:CurrentUser}\OneDrive - Microsoft\Desktop\oof message script\$({Global:UserAlias}.replace("@","_"))\External.html"
+
 	#this IF assumes if there is only 1 message file the messages are the same
 	#save as HTML for better format editing by end user
 	#check of separate files AND/OR save them in 1 file and be smart about reading it
 	
-	if(($MessageFilePath + ".txt")){ 
+	if(Check-File($TempPath)){ 
 		Write-Host "Setting the same OOF Message for both Internal and External"
-		$Message = [System.IO.File]::ReadAllText($MessageFilePath+".txt")
+		$Message = [System.IO.File]::ReadAllText($MessageFilePath)
 		Write-Output $Message
-		Set-MailboxAutoReplyConfiguration –identity $UserAlias –ExternalMessage $Message -InternalMessage $Message
+		Set-MailboxAutoReplyConfiguration –identity $Global:UserAlias –ExternalMessage $Message -InternalMessage $Message
 	}
 	else{  
 		Write-Host "Different External and Internal Messages"
-		$MessageFilePath = $MessageFilePath + "_External.txt" #external file name
-		
+				
 		$Message = [System.IO.File]::ReadAllText($MessageFilePath)
 		Write-Output ("Setting External Message`n`n" + $Message)
 		Set-MailboxAutoReplyConfiguration –identity $UserAlias –ExternalMessage $Message
 		
-		$MessageFilePath = $MessageFilePath - "Ex" + "In" #only change in file names is Ex to In
+		$MessageFilePath = $MessageFilePath -replace 'Ex','In' #only change in file names is Ex to In
 		$Message = [System.IO.File]::ReadAllText($MessageFilePath)
 		Write-Output ("Setting Internal Message`n`n" + $Message)
 		Set-MailboxAutoReplyConfiguration –identity $UserAlias -InternalMessage $Message
