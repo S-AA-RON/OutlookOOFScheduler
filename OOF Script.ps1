@@ -4,8 +4,8 @@ $Global:UserAliasSuffix="@MicrosoftSupport.com"
 $Global:MailboxARC=
 
 ##comment this out if you want it to always ask for time input when run
-$Global:EndOfShift=[datetime]"6:00pm"
-$Global:StartOfShift=[datetime]"9:00am"
+$Global:EndOfShift= [datetime] "6:00pm"
+$Global:StartOfShift= [datetime] "9:00am"
 ## if commenting the above two lines out, remove the # from the next two lines
 #$Global:EndOfShift=
 #$Global:StartOfShift=
@@ -13,11 +13,11 @@ $Global:StartOfShift=[datetime]"9:00am"
 get-Alias
 ConnectAlias2EXO
 get-ARC
-get-ARCFile
+writeARC2File
 get-Message
 writemessage
-CheckStartEnd
-#set-ARCSTATEScheduled
+#CheckStartEnd
+set-ARCSTATEScheduled
 DisconnectEXO
 
 function CreateOOFPath {
@@ -105,7 +105,7 @@ function writeARC2File {
 }
 
 function writeMessage {
-    get-ARCFile
+    writeARC2File
     #write external to html remove the'?' at the start, fix this bug later lol
     #overwrites from json
     #add file check
@@ -134,7 +134,6 @@ function GetShiftTime($StartEnd) {
 
 ###check stored start and end times 
 function CheckStartEnd {
-
     <#
 
     #######################JSON TIME DOES NOT WORK///
@@ -201,39 +200,35 @@ function CheckStartEnd {
     #>
     #are there start and end times in script file? 
     if($Global:StartOfShift -ne $null -and $Global:EndOfShift -ne $null) {
-        $temptimemath = $Global:StartOfShift
-        $temptimemath = $temptimemath.AddDays(1)
-        $PromptText = "JSON: Does your shift end today at $Global:EndOfShift and start tomorrow at $temptimemath? [Y]es/[N]o"
+        $temptimemath = Get-Date($Global:StartOfShift).AddDays(1)
+        $PromptText = "PS VARs Does your shift end today at $Global:EndOfShift and start tomorrow at $temptimemath ? [Y]es/[N]o "
         $YesNo = Read-Host -Prompt $PromptText
         if($YesNo -eq "N" -or $YesNo -eq "n") {
             #check to see if start is already correctly configured
-            $PromptText = "Does your shift start at ${Global:StartOfShift}? [Y]es/[N]o"
+            $PromptText = "Does your shift start at $Global:StartOfShift [Y]es/[N]o"
             $YesNo = Read-Host -Prompt $PromptText
-            if($YesNo -eq "N" -or $YesNo -eq "n" -or $YesNo -ne "") {
+            if($YesNo -eq "N" -or $YesNo -eq "n" -and $YesNo -ne "") {
                 $Global:StartOfShift = GetShiftTime("start")
                 #add a day for tomorrow, store in global arc config
-                $Global:MailboxARC.EndTime = $Global:StartOfShift.TimeofDay.AddDays(1)
-            }
-            #check to see if end is already correctly configured
+            }	    
+           
             $PromptText = "Does your shift end at $Global:EndOfShift [Y]es/[N]o"
             $YesNo = Read-Host -Prompt $PromptText
-	        if($YesNo -eq "N" -or $YesNo -eq "n" -or $YesNo -ne "") {
-		        $Global:EndOfShift = GetShiftTime("end")
-                #store in global arc config
-                $Global:MailboxARC.StartTime = $Global:EndOfShift.TimeofDay
-            }
+            if($YesNo -eq "N" -or $YesNo -eq "n" -and $YesNo -ne "") {
+                $Global:EndOfShift = GetShiftTime("end")
+     
+            }	    
+        #store in global arc config
+        $Global:StartOfShift = $temptimemath
+        $Global:MailboxARC.EndTime = $Global:StartOfShift
+        $Global:MailboxARC.StartTime = $Global:EndOfShift
         }
-        else {
-            #yes those values are correct do not ask me for my input
-            #store in global values to skip next if
-            $Global:MailboxARC.EndTime = $Global:StartOfShift.AddDays(1)
-            $Global:MailboxARC.StartTime = $Global:EndOfShift
-        }
+    }
+    <#
     #by this point there should be values for both but why not check
-    if($Global:MailboxARC.StartTime -ne $null -and $Global:MailboxARC.EndTime -ne $null) {
- 
+    if($Global:MailboxARC.StartTime -eq $null -or $Global:MailboxARC.EndTime -eq $null) {
         #if there are times in Global ARC are they correct
-        $PromptText = "Global: Does your shift end today at ${Global:MailboxARC.StartTime.TimeOfDay} and start tomorrow at ${Global:MailboxARC.EndTime.TimeOfDay.AddDays(1)}? [Y]es/[N]o"
+        $PromptText = "Global Does your shift end today at $Global:MailboxARC.StartTime and start tomorrow at $Global:MailboxARC.EndTime? [Y]es/[N]o"
         $YesNo = Read-Host -Prompt $PromptText
         if($YesNo -ne "N" -or $YesNo -ne "n" -or $YesNo -eq "") {
             #add a day for tomorrow store in global values as user did not want to change them
@@ -245,7 +240,7 @@ function CheckStartEnd {
             $PromptText = "Does your shift start at ${Global:MailBoxARC.EndTime}? [Y]es/[N]o"
             $YesNo = Read-Host -Prompt $PromptText
             #if not correct and not enter (blank)
-            if($YesNo -eq "N" -or $YesNo -eq "n" -or $YesNo -ne "") {
+            if($YesNo -eq "N" -or $YesNo -eq "n" -and $YesNo -ne "") {
                 $Global:StartOfShift = GetShiftTime("start")
             }
         }
@@ -256,11 +251,10 @@ function CheckStartEnd {
         #add a day for tomorrow, store in global value
         $Global:MailboxARC.EndTime = [datetime]$Global:StartOfShift.TimeofDay.AddDays(1)
 
-
         if($Global:MailBoxARC.StartTime -ne $null) {       
             $PromptText = "Does your shift end at ${Global:MailBoxARC.StartTime}? [Y]es/[N]o"
             $YesNo = Read-Host -Prompt $PromptText
-	        if($YesNo -eq "N" -or $YesNo -eq "n" -or $YesNo -ne "") {
+	        if($YesNo -eq "N" -or $YesNo -eq "n" -and $YesNo -ne "") {
 		        $Global:EndOfShift = GetShiftTime("end")                
             }
         }
@@ -270,11 +264,8 @@ function CheckStartEnd {
         }
         #store in global value
         $Global:MailboxARC.StartTime = [datetime]$Global:EndOfShift.TimeofDay
-	}
-    
-    }
-    #If either of the $Global:StartOfShift or $Global:EndOfShift are not configured, the above should ask for them
-    
+	} 
+    #If either of the $Global:StartOfShift or $Global:EndOfShift are not configured, the above should ask for them#>
 }
 
 #set autoreply to scheduled
