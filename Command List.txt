@@ -30,7 +30,7 @@ add selection for @microsoft.com and @microsoftsupport.com
 get-arcfile
 
 #write internal and external messages to html file
-write-message
+writemessage
 
 TODO:
 #ensure outlook connection
