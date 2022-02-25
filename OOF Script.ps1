@@ -2,8 +2,13 @@ $Global:UserAlias=
 $Global:CurrentUser=
 $Global:UserAliasSuffix="@MicrosoftSupport.com"
 $Global:MailboxARC=
-$Global:EndOfShift=
-$Global:StartOfShift=
+
+##comment this out if you want it to always ask for time input when run
+$Global:EndOfShift=[datetime]"6:00pm"
+$Global:StartOfShift=[datetime]"9:00am"
+## if commenting the above two lines out, remove the # from the next two lines
+#$Global:EndOfShift=
+#$Global:StartOfShift=
 
 get-Alias
 ConnectAlias2EXO
@@ -11,7 +16,9 @@ get-ARC
 get-ARCFile
 get-Message
 writemessage
-#DisconnectEXO
+CheckStartEnd
+#set-ARCSTATEScheduled
+DisconnectEXO
 
 function CreateOOFPath {
     If(!(test-path $Global:MessageFilePath))
@@ -68,13 +75,22 @@ function ConnectAlias2EXO {
 
 function get-ARC {
     $TempPath = $Global:MessageFilePath + "AutoReplyConfig.json"
+    $Global:MailboxARC = Get-MailboxAutoReplyConfiguration -identity $UserAlias
 	if(Check-File($TempPath)) {
         Write-Host "AutoConfig has pre-existing file $TempPath"
-        get-ARCFile
+        $JSONMailboxARC = Get-Content $TempPath -Raw | ConvertFrom-Json 
+        #compare file and current configuration
+        #ask to use one or the other
+        if($Global:MailboxARC -eq $JSONMailboxARC){
+            Write-Host "JSON is same as current config"
+        }
+        else {
+            Write-Host "JSON Differs"
+        }
+            
 	}
     else {
-         Write-Host "AutoConfig is being written to JSON file $TempPath"
-	    $Global:MailboxARC = Get-MailboxAutoReplyConfiguration -identity $UserAlias
+        Write-Host "AutoConfig is being written to JSON file $TempPath"
         $Global:MailboxARC | ConvertTo-Json -depth 100 | Set-Content $TempPath
     }
 		
@@ -82,9 +98,9 @@ function get-ARC {
 	Write-Host "Current Auto Reply State is : $temp"
 }
 
-function get-ARCFile {
-   
+function writeARC2File {
     $TempPath = $Global:MessageFilePath + "AutoReplyConfig.json"
+    Write-Host "Writing Mailbox Auto Reply to JSON file $TempPath"
     $Global:MailboxARC = Get-Content $TempPath -Raw | ConvertFrom-Json 
 }
 
@@ -108,6 +124,7 @@ function Check-File($FilePath) {
 }
 
 ####get start and end shift times
+### returns [datetime]
 function GetShiftTime($StartEnd) { 
 	$PromptText = "Enter when you " + $StartEnd + " your work day. Ex 9:00am"
 	$ShiftTime = Read-Host -Prompt $PromptText
@@ -115,55 +132,209 @@ function GetShiftTime($StartEnd) {
 	return $ShfitTimeOut
 }
 
+###check stored start and end times 
+function CheckStartEnd {
+
+    <#
+
+    #######################JSON TIME DOES NOT WORK///
+    #are there start and end times in current json file?
+    $TempPath = $Global:MessageFilePath + "AutoReplyConfig.json"
+    #does the json exist
+	if(Check-File($TempPath)) {
+        Write-Host "AutoConfig JSON exist at $TempPath"
+        $JSONMailboxARC = Get-Content $TempPath -Raw | ConvertFrom-Json 
+    }
+    if($JSONMailboxARC.StartTime -ne $null -and $JSONMailboxARC.EndTime -ne $null) {
+        $tempstarttime = [datetime] ($JSONMailboxARC.StartTime.TimeOfDay)
+        $tempendtime = [datetime] ($JSONMailboxARC.EndTime.TimeOfDay)
+        $PromptText = "Does your shift end today at $tempstarttime and start tomorrow at $tempendtime? [Y]es/[N]o"
+        $YesNo = Read-Host -Prompt $PromptText
+        if($YesNo -ne "N" -or $YesNo -ne "n" -or $YesNo -eq "") {
+            #add a day for tomorrow store in global values as user did not want to change them
+
+            $temptime = [datetime] ($JSONMailboxARC.StartTime.TimeOfDay)
+            $Global:MailboxARC.EndTime = $temptime.AddDays(1)
+            $Global:MailboxARC.StartTime = [datetime]$JSONMailboxARC.EndTime.TimeOfDay
+        }
+        else {
+            #user does not like json values
+            #or one JSON time is Null
+            #then ask the user for their input
+
+            #is not null, then is it correct?
+            if($JSONMailboxARC.EndTime -ne $null) {
+                $PromptText = "Does your shift start at ${JSONMailboxARC.EndTime.TimeOfDay}? [Y]es/[N]o"
+                $YesNo = Read-Host -Prompt $PromptText
+                if($YesNo -eq "N" -or $YesNo -eq "n" -or $YesNo -ne "") {
+                    $Global:StartOfShift = GetShiftTime("start")
+                    #add a day for tomorrow                    
+                }
+                $Global:MailboxARC.EndTime = [datetime]$Global:StartOfShift.TimeofDay.AddDays(1)
+            }
+            #if null ask user right away
+            else {
+                $Global:StartOfShift = GetShiftTime("start")                
+            }
+            #store start time in global
+            $Global:MailboxARC.EndTime = [datetime]$Global:StartOfShift.TimeofDay.AddDays(1)
+
+            #if not null, is it correct
+            if($JSONMailboxARC.EndTime -ne $null) {
+                $PromptText = "Does your shift end at ${JSONMailboxARC.StartTime.TimeOfDay}? [Y]es/[N]o"
+                $YesNo = Read-Host -Prompt $PromptText
+	            if($YesNo -eq "N" -or $YesNo -eq "n" -or $YesNo -ne "") {
+		            $Global:EndOfShift = GetShiftTime("end")
+                }
+            }
+            #if null ask user right away
+            else {
+                $Global:EndOfShift = GetShiftTime("end")                
+            }
+            #store start time in global
+            $Global:MailboxARC.StartTime = [datetime]$Global:EndOfShift.TimeofDay
+
+        }
+        #store global values in json, regardless of change
+        $Global:MailboxARC | ConvertTo-Json -depth 100 | Set-Content $TempPath
+    }
+    #>
+    #are there start and end times in script file? 
+    if($Global:StartOfShift -ne $null -and $Global:EndOfShift -ne $null) {
+        $temptimemath = $Global:StartOfShift
+        $temptimemath = $temptimemath.AddDays(1)
+        $PromptText = "JSON: Does your shift end today at $Global:EndOfShift and start tomorrow at $temptimemath? [Y]es/[N]o"
+        $YesNo = Read-Host -Prompt $PromptText
+        if($YesNo -eq "N" -or $YesNo -eq "n") {
+            #check to see if start is already correctly configured
+            $PromptText = "Does your shift start at ${Global:StartOfShift}? [Y]es/[N]o"
+            $YesNo = Read-Host -Prompt $PromptText
+            if($YesNo -eq "N" -or $YesNo -eq "n" -or $YesNo -ne "") {
+                $Global:StartOfShift = GetShiftTime("start")
+                #add a day for tomorrow, store in global arc config
+                $Global:MailboxARC.EndTime = $Global:StartOfShift.TimeofDay.AddDays(1)
+            }
+            #check to see if end is already correctly configured
+            $PromptText = "Does your shift end at $Global:EndOfShift [Y]es/[N]o"
+            $YesNo = Read-Host -Prompt $PromptText
+	        if($YesNo -eq "N" -or $YesNo -eq "n" -or $YesNo -ne "") {
+		        $Global:EndOfShift = GetShiftTime("end")
+                #store in global arc config
+                $Global:MailboxARC.StartTime = $Global:EndOfShift.TimeofDay
+            }
+        }
+        else {
+            #yes those values are correct do not ask me for my input
+            #store in global values to skip next if
+            $Global:MailboxARC.EndTime = $Global:StartOfShift.AddDays(1)
+            $Global:MailboxARC.StartTime = $Global:EndOfShift
+        }
+    #by this point there should be values for both but why not check
+    if($Global:MailboxARC.StartTime -ne $null -and $Global:MailboxARC.EndTime -ne $null) {
+ 
+        #if there are times in Global ARC are they correct
+        $PromptText = "Global: Does your shift end today at ${Global:MailboxARC.StartTime.TimeOfDay} and start tomorrow at ${Global:MailboxARC.EndTime.TimeOfDay.AddDays(1)}? [Y]es/[N]o"
+        $YesNo = Read-Host -Prompt $PromptText
+        if($YesNo -ne "N" -or $YesNo -ne "n" -or $YesNo -eq "") {
+            #add a day for tomorrow store in global values as user did not want to change them
+            $Global:MailboxARC.EndTime = [datetime]$Global:MailboxARC.StartTime.TimeOfDay.AddDays(1)
+            $Global:MailboxARC.StartTime = [datetime]$Global:MailboxARC.EndTime.TimeOfDay
+        }
+        #if values are not correct then ask the user for their input
+        if($Global:MailBoxARC.EndTime -ne $null) {
+            $PromptText = "Does your shift start at ${Global:MailBoxARC.EndTime}? [Y]es/[N]o"
+            $YesNo = Read-Host -Prompt $PromptText
+            #if not correct and not enter (blank)
+            if($YesNo -eq "N" -or $YesNo -eq "n" -or $YesNo -ne "") {
+                $Global:StartOfShift = GetShiftTime("start")
+            }
+        }
+        #is null ask for input
+        else {
+            $Global:StartOfShift = GetShiftTime("start")
+        }
+        #add a day for tomorrow, store in global value
+        $Global:MailboxARC.EndTime = [datetime]$Global:StartOfShift.TimeofDay.AddDays(1)
+
+
+        if($Global:MailBoxARC.StartTime -ne $null) {       
+            $PromptText = "Does your shift end at ${Global:MailBoxARC.StartTime}? [Y]es/[N]o"
+            $YesNo = Read-Host -Prompt $PromptText
+	        if($YesNo -eq "N" -or $YesNo -eq "n" -or $YesNo -ne "") {
+		        $Global:EndOfShift = GetShiftTime("end")                
+            }
+        }
+        #is null get input
+        else {
+            $Global:EndOfShift = GetShiftTime("end")
+        }
+        #store in global value
+        $Global:MailboxARC.StartTime = [datetime]$Global:EndOfShift.TimeofDay
+	}
+    
+    }
+    #If either of the $Global:StartOfShift or $Global:EndOfShift are not configured, the above should ask for them
+    
+}
+
 #set autoreply to scheduled
 #this requires start and end times
 function Set-ARCSTATEScheduled {
-	if($Global:MailboxARC -eq $null){
-		get-arc
-	}
-	if($Global:UserAlias -eq $null){
-		get-Alias
-	}
-	if($Global:StartOfShift -eq $null){
-		$Global:StartOfShift = GetShiftTime("start")
-	}
-	if($Global:EndOfShift -eq $null){
-		$Global:EndOfShift = GetShiftTime("end")
-	}
 	#is Reply state disabled or enabled by the user manually instead of scheduled
-	if($Global:MailboxARC.AutoReplyState -eq "Disabled" -or $Global:MailboxARC.AutoReplyState -eq "Enabled"){
-		$CurrentTime = Get-Date
-		IsOfficeHours
-	}
-    #remove this else? this is the point of this function
+    #remove this else? what is the point of this function
+	IsOfficeHours
+	
     #add read from ARC json
-	else {
-		$Global:StartOfShift = $Global:StartOfShift.TimeofDay.AddDays(1)
-		Set-MailboxAutoReplyConfiguration –identity $UserAlias `
-		-ExternalMessage $Global:MailboxARC.ExternalMessage `
-		-InternalMessage $Global:MailboxARC.InternalMessage `
-		-StartTime $EndOfShift.TimeofDay `
-		-EndTime $StartOfShift.TimeofDay `
-		-AutoReplyState "Scheduled"
-	}
+
+    #do you work tomorrow?
+
+    #days of the week you work
+    #store shedule in json file 
+    #working days of the week [0,1,1,1,1,1,0]
+
+    #store start and end times per day? per shift?
+    
+    if($Global:MailboxARC.AutoReplyState -eq "Scheduled") {
+
+        #enable schedule yes/no
+        $PromptText = "Would you like to enable a scheduled OOF message? [Y]es/[N]o"
+	    $YesNo = Read-Host -Prompt $PromptText
+	    if($YesNo -eq "Y" -or $YesNo -eq "y" -or $YesNo -eq "") {
+            CheckStartEnd
+            Set-MailboxAutoReplyConfiguration –identity $UserAlias `
+		    -ExternalMessage $Global:MailboxARC.ExternalMessage `
+		    -InternalMessage $Global:MailboxARC.InternalMessage `
+		    -StartTime $Global:MailboxARC.StartTime.TimeofDay `
+		    -EndTime $Global:MailboxARC.EndTime.TimeofDay `
+		    -AutoReplyState "Scheduled"
+        }
+        else {
+            Write-Host "Why run the command if you do not want to use it?"
+        }
+    }
 }
 
 function IsOfficeHours {
+    $tempstate = $Global:MailboxARC.AutoReplyState
+    $CurrentTime = Get-Date
+    #$CurrentTime.TimeOfDay
+    #$Global:MailboxARC.StartTime.TimeOfDay
+    #$Global:MailboxARC.EndTime.TimeOfDay
 	#check if it is during shift return bool based on start and end time
-	if($CurrentTime.TimeOfDay -lt $StartOfShift.TimeOfDay){ 
-		Write-Host "Currently Before Shift`n"
+	if($CurrentTime.TimeOfDay -lt $Global:MailboxARC.EndTime.TimeOfDay){ 
+		Write-Host "Before Shift and auto reply for $Global:UserAlias is $tempstate`n"
 	}
-	elseif($CurrentTime.TimeOfDay -gt $EndOfShift.TimeOfDay){
-		Write-Host "Currently After Shift`n"
+	elseif($CurrentTime.TimeOfDay -gt $Global:MailboxARC.StartTime.TimeOfDay){
+		Write-Host "After Shift and auto reply for $Global:UserAlias is $tempstate`n"
 	}
-	elseif($EndOfShift.TimeOfDay -le $CurrentTime.TimeOfDay -And $CurrentTime.TimeOfDay -ge $StartOfShift.TimeOfDay){
-		Write-Host "Currently During Shift`n"
-		Return True
+	elseif($Global:MailboxARC.EndTime.TimeOfDay -le $CurrentTime.TimeOfDay -And $CurrentTime.TimeOfDay -ge $Global:MailboxARC.StartTime.TimeOfDay){
+		Write-Host "During Shift and auto reply for $Global:UserAlias is $tempstate`n"
+		return $true
 	}
 	else {
 		Write-Host "Twilight Zone"
 	}
-	Return False
+	return $false
 }
 
 function Get-Message {
@@ -175,7 +346,7 @@ function Get-Message {
         #If messages are the same only write one message file to disk
 		if($Global:MailboxARC.ExternalMessage -eq $Global:MailboxARC.InternalMessage){
             $TempPath = $Global:MessageFilePath + "External.html"
-            Write-Host "The internal and external messages are the same. `nOne OOF Message to Rule them All `n Writing Message to HTML $TempPath"
+            Write-Host "The internal and external messages are the same.`nOne OOF Message to Rule them All `nWriting Message to HTML $TempPath"
             $Global:MailboxARC.ExternalMessage.substring(1) | Out-File -FilePath $TempPath
 		}
 		else{

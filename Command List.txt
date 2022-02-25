@@ -26,10 +26,10 @@ get-arc
 gets user name and which alias to use
 add selection for @microsoft.com and @microsoftsupport.com
 
-#gets arc from json file
-get-arcfile
+#writes arc config to json file in the local users desktop under the alias
+writeARC2File
 
-#write internal and external messages to html file
+#writes both internal and external messages to html file
 writemessage
 
 TODO:
