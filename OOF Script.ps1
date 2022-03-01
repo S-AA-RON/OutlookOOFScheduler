@@ -34,7 +34,7 @@ function CreateOOFPath {
 
 $AliasPath = $Global:UserAlias.replace("@","_")
 $AliasPath = $AliasPath.replace(".","_")
-$Global:MessageFilePath= "C:\Users\${Global:CurrentUser}\OneDrive - Microsoft\Desktop\oof message script\$AliasPath\"
+$Global:MessageFilePath= "C:\Users\$Global:CurrentUser\OneDrive - Microsoft\Desktop\oof message script\$AliasPath\"
 
 CreateOOFPath
 
