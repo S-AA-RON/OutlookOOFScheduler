@@ -25,7 +25,7 @@ function CreateOOFPath {
     If(!(test-path $Global:MessageFilePath))
     {
           New-Item -ItemType Directory -Force -Path $Global:MessageFilePath
-	  Write-Host Path Created: $Global:MessageFilePath"
+	  Write-Host "Path Created: $Global:MessageFilePath"
     }
     else {
     	    Write-Host "Path already exists: $Global:MessageFilePath"
