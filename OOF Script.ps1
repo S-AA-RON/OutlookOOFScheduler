@@ -21,15 +21,21 @@ set-ARCSTATEScheduled
 DisconnectEXO
 
 function CreateOOFPath {
+    Write-Host "Global Path is $Global:MessageFilePath"
     If(!(test-path $Global:MessageFilePath))
     {
           New-Item -ItemType Directory -Force -Path $Global:MessageFilePath
+	  Write-Host Path Created: $Global:MessageFilePath"
+    }
+    else {
+    	    Write-Host "Path already exists: $Global:MessageFilePath"
     }
 }
 
 $AliasPath = $Global:UserAlias.replace("@","_")
 $AliasPath = $AliasPath.replace(".","_")
 $Global:MessageFilePath= "C:\Users\${Global:CurrentUser}\OneDrive - Microsoft\Desktop\oof message script\$AliasPath\"
+
 CreateOOFPath
 
 function InstallEXOM {
@@ -76,7 +82,7 @@ function ConnectAlias2EXO {
 function get-ARC {
     $TempPath = $Global:MessageFilePath + "AutoReplyConfig.json"
     $Global:MailboxARC = Get-MailboxAutoReplyConfiguration -identity $UserAlias
-	if(Check-File($TempPath)) {
+    if(Check-File($TempPath)) {
         Write-Host "AutoConfig has pre-existing file $TempPath"
         $JSONMailboxARC = Get-Content $TempPath -Raw | ConvertFrom-Json 
         #compare file and current configuration
@@ -87,8 +93,7 @@ function get-ARC {
         else {
             Write-Host "JSON Differs"
         }
-            
-	}
+    }
     else {
         Write-Host "AutoConfig is being written to JSON file $TempPath"
         $Global:MailboxARC | ConvertTo-Json -depth 100 | Set-Content $TempPath
@@ -292,7 +297,7 @@ function Set-ARCSTATEScheduled {
 	    $YesNo = Read-Host -Prompt $PromptText
 	    if($YesNo -eq "Y" -or $YesNo -eq "y" -or $YesNo -eq "") {
             CheckStartEnd
-            Set-MailboxAutoReplyConfiguration –identity $UserAlias `
+            Set-MailboxAutoReplyConfiguration Â–identity $UserAlias `
 		    -ExternalMessage $Global:MailboxARC.ExternalMessage `
 		    -InternalMessage $Global:MailboxARC.InternalMessage `
 		    -StartTime $Global:MailboxARC.StartTime.TimeofDay `
@@ -363,19 +368,19 @@ function Set-Message {
 		Write-Host "Setting the same OOF Message for both Internal and External"
 		$Message = [System.IO.File]::ReadAllText($MessageFilePath)
 		Write-Output $Message
-		Set-MailboxAutoReplyConfiguration –identity $Global:UserAlias –ExternalMessage $Message -InternalMessage $Message
+		Set-MailboxAutoReplyConfiguration Â–identity $Global:UserAlias Â–ExternalMessage $Message -InternalMessage $Message
 	}
 	else{  
 		Write-Host "Different External and Internal Messages"
 				
 		$Message = [System.IO.File]::ReadAllText($MessageFilePath)
 		Write-Output ("Setting External Message`n`n" + $Message)
-		Set-MailboxAutoReplyConfiguration –identity $UserAlias –ExternalMessage $Message
+		Set-MailboxAutoReplyConfiguration Â–identity $UserAlias Â–ExternalMessage $Message
 		
 		$MessageFilePath = $MessageFilePath -replace 'Ex','In' #only change in file names is Ex to In
 		$Message = [System.IO.File]::ReadAllText($MessageFilePath)
 		Write-Output ("Setting Internal Message`n`n" + $Message)
-		Set-MailboxAutoReplyConfiguration –identity $UserAlias -InternalMessage $Message
+		Set-MailboxAutoReplyConfiguration Â–identity $UserAlias -InternalMessage $Message
 	}
 }
 
