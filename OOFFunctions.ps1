@@ -11,7 +11,7 @@ function get-Alias {
 		
 	Write-Host "$Global:CurrentUser " -ForegroundColor Blue -NoNewline
 	Write-Host "please enter the Alias Suffix of the Account to change. Ex. " -NoNewline
-	Write-Host "$Global:UserAliasSuffix" -ForegroundColor Blue -NoNewline
+	Write-Host "$Global:UserAliasSuffix : " -ForegroundColor Blue -NoNewline
 
 	$Global:UserAliasSuffix = Read-Host
     if($Global:UserAliasSuffix -eq ""){ #if user doesn't input anything use default
@@ -35,7 +35,7 @@ function ConnectAlias2EXO {
 	#InstallEXOM #is EXO module installed
 	
 	Write-Host "Connecting to your Outlook Account $UserAlias`n" 
-	Connect-ExchangeOnline -UserPrincipalName $UserAlias
+	Connect-ExchangeOnline -UserPrincipalName $Global:UserAlias
 	Write-Host "Done Connecting"
 }
 
